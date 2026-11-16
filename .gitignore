@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Editors
+.vscode/
+.idea/
+*.swp
+
+# Build output
+build/
+*.o
+*.elf
+*.hex
+*.bin
+*.map
+.pio/
+
+# CAD temp / backup files
+*.bak
+*.tmp
+~$*
+
+# Office lock files
+~*.docx
+~*.xlsx
+~*.pptx
