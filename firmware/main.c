@@ -3,11 +3,16 @@
  * Front ultrasonic sensor + steering servo + thrust fan, in plain AVR C
  * (ATmega328P on the Arduino Nano controller board, 16 MHz, no Arduino library).
  *
+ * Plan v3, stage 1 (safe version). IMU functions come from imu.h (Iphi);
+ * imu_stub.c stands in for them until imu.c is ready.
+ *
  * Behaviour:
- *   CRUISE    drive straight, ping the front sensor
+ *   WAIT      2 s start delay, fans off, IMU calibrated here
+ *   CRUISE    hold heading (servo = 90 + IMU_Steer()), ping the front sensor
  *   SCAN      wall ahead: cut thrust, sweep the sensor across SCAN_ANGLES,
  *             remember the distance at each angle
- *   TURN      steer the thrust fan toward the angle with the most room
+ *   TURN      steer toward the angle with the most room; ends when the IMU
+ *             says the turn is done, or after TURN_TIMEOUT_MS as a safety
  *   RECENTRE  straighten the servo, then back to CRUISE
  *   STOPPED   fans off (bar found, or time limit reached)
  *
@@ -36,6 +41,9 @@
 #include <util/delay.h>
 #include <stdint.h>
 
+#include "tick.h"
+#include "imu.h"
+
 /* ------------------------------ tuning ------------------------------ */
 /* All of these are starting guesses. Tune them on the real craft.      */
 
@@ -53,7 +61,7 @@
 
 #define PING_PERIOD_MS    60      /* gap between pings (echoes need to die out) */
 #define PING_TIMEOUT_MS   40      /* give up on an echo after this long       */
-#define TURN_MS           1500    /* placeholder until the IMU says "done"    */
+#define TURN_TIMEOUT_MS   3000    /* safety: end a turn even if the IMU never says done */
 #define START_DELAY_MS    2000    /* hands clear before the fans start        */
 #define RUN_LIMIT_MS      120000UL /* course time limit: 2 minutes            */
 
@@ -81,7 +89,7 @@ static void tick_init(void)
     TIMSK2 = _BV(OCIE2A);
 }
 
-static uint32_t millis_now(void)
+uint32_t millis_now(void)
 {
     uint32_t ms;
     uint8_t sreg = SREG;
@@ -306,12 +314,21 @@ static uint8_t bar_detected(void)
     return 0;
 }
 
-/* Iphi: return 1 when the IMU says the craft has turned far enough.
- * target_angle is the servo angle we steered to (above 90 = left turn). */
-static uint8_t turn_finished(uint32_t ms_in_turn, uint8_t target_angle)
+/* Keep an angle difference in -180..+180. */
+static float wrap180(float a)
 {
-    (void)target_angle;
-    return ms_in_turn >= TURN_MS;
+    while (a > 180.0f)  a -= 360.0f;
+    while (a < -180.0f) a += 360.0f;
+    return a;
+}
+
+/* Servo angle that holds the IMU's target heading. */
+static uint8_t heading_hold_angle(void)
+{
+    float a = (float)SERVO_CENTRE + IMU_Steer();
+    if (a < 0.0f)   a = 0.0f;
+    if (a > 255.0f) a = 255.0f;
+    return (uint8_t)(a + 0.5f);           /* servo_write clamps to the mount limits */
 }
 
 /* --------------------------- state machine --------------------------- */
@@ -333,6 +350,8 @@ static uint8_t  g_scan_samples = 0;
 static uint16_t g_scan_sample[3];
 static uint16_t g_scan_cm[SCAN_COUNT];
 static uint8_t  g_turn_angle = SERVO_CENTRE;
+static float    g_scan_yaw = 0.0f;        /* heading when the scan started */
+static uint8_t  g_imu_ready = 0;
 
 static void enter(uint8_t state)
 {
@@ -362,6 +381,7 @@ static void stop_everything(const char *why)
 static void start_scan(void)
 {
     thrust_set(0);
+    g_scan_yaw = IMU_Yaw();               /* scan angles are measured from here */
     g_scan_index = 0;
     g_scan_samples = 0;
     aim(SCAN_ANGLES[0]);
@@ -381,6 +401,11 @@ static void finish_scan(void)
     uart_text("TURN to ");
     uart_number(g_turn_angle);
     uart_text("\r\n");
+    /* Turn by (chosen - 90), measured from the heading at the start of the
+     * scan. With thrust off the craft can drift round during the scan, so
+     * subtract whatever it already rotated. */
+    IMU_SetTarget(wrap180((float)g_turn_angle - (float)SERVO_CENTRE
+                          + g_scan_yaw - IMU_Yaw()));
     aim(g_turn_angle);
     thrust_set(THRUST_TURN);
     enter(ST_TURN);
@@ -406,6 +431,14 @@ static void control_step(void)
 
     switch (g_state) {
     case ST_WAIT:
+        if (!g_imu_ready) {
+            /* craft is still and fans are off: calibrate now (~2 s) */
+            g_imu_ready = IMU_Calibrate();
+            if (!g_imu_ready) {
+                uart_text("IMU calibrate failed, retrying\r\n");
+            }
+            break;
+        }
         if (in_state >= START_DELAY_MS) {
             lift_set(LIFT_DUTY);
             thrust_set(THRUST_CRUISE);
@@ -416,6 +449,7 @@ static void control_step(void)
         break;
 
     case ST_CRUISE:
+        servo_write(heading_hold_angle());
         if (us_update(&cm)) {
             uart_text("front ");
             uart_number(cm);
@@ -459,7 +493,10 @@ static void control_step(void)
         break;
 
     case ST_TURN:
-        if (turn_finished(in_state, g_turn_angle)) {
+        if (IMU_TurnFinished() || in_state >= TURN_TIMEOUT_MS) {
+            if (in_state >= TURN_TIMEOUT_MS) {
+                uart_text("turn timeout\r\n");
+            }
             aim(SERVO_CENTRE);
             enter(ST_RECENTRE);
         }
@@ -495,8 +532,12 @@ int main(void)
     hw_init();
     sei();
     uart_text("ready\r\n");
+    if (!IMU_Init()) {
+        uart_text("IMU not found\r\n");
+    }
     enter(ST_WAIT);
     for (;;) {
+        IMU_Update();
         control_step();
     }
 }
