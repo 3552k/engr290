@@ -4,7 +4,7 @@
  * (ATmega328P on the Arduino Nano controller board, 16 MHz, no Arduino library).
  *
  * Plan v3, stage 1 (safe version). IMU functions come from imu.h (Iphi);
- * imu_stub.c stands in for them until imu.c is ready.
+ * the driver is in imu.c. Build with "make", flash with "make upload".
  *
  * Behaviour:
  *   WAIT      2 s start delay, fans off, IMU calibrated here
@@ -436,6 +436,9 @@ static void control_step(void)
             g_imu_ready = IMU_Calibrate();
             if (!g_imu_ready) {
                 uart_text("IMU calibrate failed, retrying\r\n");
+            } else {
+                uart_text("IMU calibrated\r\n");
+                enter(ST_WAIT);           /* start delay counts from here */
             }
             break;
         }
