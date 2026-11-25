@@ -44,8 +44,8 @@
 #include "tick.h"
 #include "imu.h"
 
-/* ------------------------------ tuning ------------------------------ */
-/* All of these are starting guesses. Tune them on the real craft.      */
+ /* ------------------------------ tuning ------------------------------ */
+ /* All of these are starting guesses. Tune them on the real craft.      */
 
 #define WALL_CM           40      /* start a scan when a wall is this close   */
 #define WALL_HITS         2       /* readings in a row needed to believe it   */
@@ -85,7 +85,7 @@ static void tick_init(void)
     /* CTC mode, prescaler 64: 16 MHz / 64 = 250 kHz, 250 counts = 1 ms */
     TCCR2A = _BV(WGM21);
     TCCR2B = _BV(CS22);
-    OCR2A  = 249;
+    OCR2A = 249;
     TIMSK2 = _BV(OCIE2A);
 }
 
@@ -103,7 +103,7 @@ uint32_t millis_now(void)
 static uint32_t micros_locked(void)
 {
     uint32_t ms = g_ms;
-    uint8_t  t  = TCNT2;
+    uint8_t  t = TCNT2;
     /* a tick happened but its interrupt has not run yet */
     if ((TIFR2 & _BV(OCF2A)) && t < 125) {
         ms++;
@@ -116,18 +116,18 @@ static uint32_t micros_locked(void)
 #if DEBUG_UART
 static void uart_init(void)
 {
-    UBRR0  = 103;                        /* 9600 baud at 16 MHz */
+    UBRR0 = 103;                        /* 9600 baud at 16 MHz */
     UCSR0B = _BV(TXEN0);
     UCSR0C = _BV(UCSZ01) | _BV(UCSZ00);  /* 8 data bits, 1 stop bit */
 }
 
 static void uart_char(char c)
 {
-    while (!(UCSR0A & _BV(UDRE0))) { }
+    while (!(UCSR0A & _BV(UDRE0))) {}
     UDR0 = (uint8_t)c;
 }
 
-static void uart_text(const char *s)
+static void uart_text(const char* s)
 {
     while (*s) {
         uart_char(*s++);
@@ -156,7 +156,7 @@ static void uart_number(uint16_t n)
 
 static void fans_init(void)
 {
-    DDRD  |= _BV(PD6) | _BV(PD5);
+    DDRD |= _BV(PD6) | _BV(PD5);
     PORTD &= (uint8_t)~(_BV(PD6) | _BV(PD5));
     /* Fast PWM, prescaler 64. Outputs are connected only while duty > 0. */
     TCCR0A = _BV(WGM01) | _BV(WGM00);
@@ -167,7 +167,8 @@ static void thrust_set(uint8_t duty)
 {
     if (duty == 0) {
         TCCR0A &= (uint8_t)~_BV(COM0A1);   /* pin back to plain low = fully off */
-    } else {
+    }
+    else {
         OCR0A = duty;
         TCCR0A |= _BV(COM0A1);
     }
@@ -177,7 +178,8 @@ static void lift_set(uint8_t duty)
 {
     if (duty == 0) {
         TCCR0A &= (uint8_t)~_BV(COM0B1);
-    } else {
+    }
+    else {
         OCR0B = duty;
         TCCR0A |= _BV(COM0B1);
     }
@@ -205,7 +207,7 @@ static void servo_init(void)
      * The mode is set first because ICR1 can only be written in this mode. */
     TCCR1A = _BV(COM1A1) | _BV(WGM11);
     TCCR1B = _BV(WGM13) | _BV(WGM12) | _BV(CS11);
-    ICR1   = 39999;
+    ICR1 = 39999;
     servo_write(SERVO_CENTRE);
 }
 
@@ -229,7 +231,8 @@ ISR(INT0_vect)
     uint32_t now = micros_locked();
     if (PIND & _BV(PD2)) {
         g_echo_start_us = now;
-    } else {
+    }
+    else {
         g_echo_width_us = now - g_echo_start_us;
         g_echo_done = 1;
     }
@@ -240,9 +243,9 @@ static uint32_t g_ping_sent_ms = 0;
 
 static void us_init(void)
 {
-    DDRB  |= _BV(PB3);                    /* trig = output, low */
+    DDRB |= _BV(PB3);                    /* trig = output, low */
     PORTB &= (uint8_t)~_BV(PB3);
-    DDRD  &= (uint8_t)~_BV(PD2);          /* echo = input */
+    DDRD &= (uint8_t)~_BV(PD2);          /* echo = input */
     EICRA |= _BV(ISC00);                  /* INT0 on any edge */
     EIMSK |= _BV(INT0);
 }
@@ -258,7 +261,7 @@ static void us_restart(void)
  * Call this every pass of the main loop. It sends pings on its own schedule.
  * Returns 1 and fills *cm when a new distance is ready, otherwise returns 0.
  */
-static uint8_t us_update(uint16_t *cm)
+static uint8_t us_update(uint16_t* cm)
 {
     uint32_t now = millis_now();
 
@@ -367,7 +370,7 @@ static void aim(uint8_t angle)
     us_restart();
 }
 
-static void stop_everything(const char *why)
+static void stop_everything(const char* why)
 {
     thrust_set(0);
     lift_set(0);
@@ -405,7 +408,7 @@ static void finish_scan(void)
      * scan. With thrust off the craft can drift round during the scan, so
      * subtract whatever it already rotated. */
     IMU_SetTarget(wrap180((float)g_turn_angle - (float)SERVO_CENTRE
-                          + g_scan_yaw - IMU_Yaw()));
+        + g_scan_yaw - IMU_Yaw()));
     aim(g_turn_angle);
     thrust_set(THRUST_TURN);
     enter(ST_TURN);
@@ -436,7 +439,8 @@ static void control_step(void)
             g_imu_ready = IMU_Calibrate();
             if (!g_imu_ready) {
                 uart_text("IMU calibrate failed, retrying\r\n");
-            } else {
+            }
+            else {
                 uart_text("IMU calibrated\r\n");
                 enter(ST_WAIT);           /* start delay counts from here */
             }
@@ -459,7 +463,8 @@ static void control_step(void)
             uart_text("\r\n");
             if (cm < WALL_CM) {
                 g_wall_hits++;
-            } else {
+            }
+            else {
                 g_wall_hits = 0;
             }
             if (g_wall_hits >= WALL_HITS) {
@@ -488,7 +493,8 @@ static void control_step(void)
                 if (g_scan_index < SCAN_COUNT) {
                     aim(SCAN_ANGLES[g_scan_index]);
                     enter(ST_SCAN);
-                } else {
+                }
+                else {
                     finish_scan();
                 }
             }
