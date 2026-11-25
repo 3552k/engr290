@@ -12,8 +12,8 @@
 #include "imu.h"
 
 // ---- Settings ----
-extern uint32_t Millis(void);   // Ella's 1 ms tick: change the name if needed
-#define IMU_NOW_MS() Millis()
+#include "tick.h"              // millis_now(): Ella's 1 ms tick in main.c
+#define IMU_NOW_MS() millis_now()
 
 #define IMU_YAW_SIGN 1          // -1 if turning left makes yaw go the wrong way
 
