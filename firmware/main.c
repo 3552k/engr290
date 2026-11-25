@@ -18,7 +18,7 @@
  *
  * Wiring (Controller_connectors_pinout_1_12.pdf, hardware v3.11):
  *   Front ultrasonic  P6   Echo = PD2 (INT0), Trig = PB3
- *   Servo             P15  PB2 (OC1B)
+ *   Servo             P9   PB1 (OC1A), 200 ohm series resistor on the board
  *   Thrust fan        P4   PD6 (OC0A, "PWM1")
  *   Lift fan          P3   PD5 (OC0B, "PWM2")
  *
@@ -195,15 +195,15 @@ static void servo_write(uint8_t angle)
     g_servo_angle = angle;
     /* HS-311: about 10 us per degree, 1500 us = centre */
     pulse_us = (uint16_t)(600 + (uint16_t)angle * 10);
-    OCR1B = (uint16_t)(pulse_us * 2);      /* timer counts in 0.5 us steps */
+    OCR1A = (uint16_t)(pulse_us * 2);      /* timer counts in 0.5 us steps */
 }
 
 static void servo_init(void)
 {
-    DDRB |= _BV(PB2);
+    DDRB |= _BV(PB1);
     /* Fast PWM with ICR1 as top, prescaler 8: 40000 counts = 20 ms.
      * The mode is set first because ICR1 can only be written in this mode. */
-    TCCR1A = _BV(COM1B1) | _BV(WGM11);
+    TCCR1A = _BV(COM1A1) | _BV(WGM11);
     TCCR1B = _BV(WGM13) | _BV(WGM12) | _BV(CS11);
     ICR1   = 39999;
     servo_write(SERVO_CENTRE);
