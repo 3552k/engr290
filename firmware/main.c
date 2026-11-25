@@ -360,6 +360,9 @@ static void enter(uint8_t state)
 {
     g_state = state;
     g_state_start_ms = millis_now();
+    if (state == ST_CRUISE) {
+        uart_text("CRUISE\r\n");
+    }
 }
 
 /* Point the servo somewhere and note how long it needs to get there. */
@@ -434,6 +437,7 @@ static void control_step(void)
 
     switch (g_state) {
     case ST_WAIT:
+        servo_write(SERVO_CENTRE);        /* face straight ahead while calibrating and waiting */
         if (!g_imu_ready) {
             /* craft is still and fans are off: calibrate now (~2 s) */
             g_imu_ready = IMU_Calibrate();
@@ -527,6 +531,21 @@ static void control_step(void)
 
 /* -------------------------------- main ------------------------------- */
 
+/* Print why the board (re)started. "brownout" means the supply voltage
+ * dipped, e.g. when the fans or servo start. */
+static void report_reset_cause(void)
+{
+    uint8_t cause = MCUSR;
+    MCUSR = 0;
+    uart_text("reset:");
+    if (cause & _BV(PORF))  uart_text(" power-on");
+    if (cause & _BV(EXTRF)) uart_text(" reset-pin");
+    if (cause & _BV(BORF))  uart_text(" BROWNOUT");
+    if (cause & _BV(WDRF))  uart_text(" watchdog");
+    if (!cause)             uart_text(" unknown");
+    uart_text("\r\n");
+}
+
 static void hw_init(void)
 {
     tick_init();
@@ -540,6 +559,7 @@ int main(void)
 {
     hw_init();
     sei();
+    report_reset_cause();
     uart_text("ready\r\n");
     if (!IMU_Init()) {
         uart_text("IMU not found\r\n");

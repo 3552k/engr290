@@ -1,8 +1,10 @@
 # ENGR 290 hovercraft firmware (ATmega328P / Arduino Nano, 16 MHz)
 #   make          build build/hovercraft.hex
 #   make upload   build and flash over USB
-#   make monitor  show the debug output (9600 baud), Ctrl+C to exit
+#   make monitor  show the debug output (9600 baud) and send keys, Ctrl+C to exit
 #   make clean
+#
+#   make upload-servo-test   flash servo_test.c (move the servo by keyboard)
 
 MCU     := atmega328p
 F_CPU   := 16000000UL
@@ -29,7 +31,7 @@ CFLAGS  := -std=c11 -Os -Wall -Wextra -mmcu=$(MCU) -DF_CPU=$(F_CPU) \
            -ffunction-sections -fdata-sections -MMD -MP
 LDFLAGS := -mmcu=$(MCU) -Wl,--gc-sections
 
-.PHONY: all upload monitor clean
+.PHONY: all upload monitor clean servo-test upload-servo-test
 
 all: $(TARGET).hex
 	$(SIZE) -C --mcu=$(MCU) $(TARGET).elf
@@ -49,11 +51,24 @@ $(TARGET).hex: $(TARGET).elf
 upload: all
 	$(AVRDUDE) $(DUDE_CONFIG) -p $(MCU) -c arduino -P $(PORT) -b $(BAUD) -D -U flash:w:$(TARGET).hex:i
 
+servo-test:
+	$(MAKE) TARGET=build/servo_test SOURCES=servo_test.c all
+
+upload-servo-test:
+	$(MAKE) TARGET=build/servo_test SOURCES=servo_test.c upload
+
+# Shows the board's output and sends each key you press. Ctrl+C exits and
+# restores the terminal settings.
 monitor:
 	@test -c "$(PORT)" || { echo "No serial device at $(PORT). Try PORT=/dev/ttyUSB0"; exit 1; }
 	@stty -F "$(PORT)" $(MONITOR_BAUD) raw -echo -ixon -ixoff -crtscts
-	@echo "Listening on $(PORT) at $(MONITOR_BAUD) baud. Ctrl+C to exit."
-	@cat "$(PORT)"
+	@echo "Connected to $(PORT) at $(MONITOR_BAUD) baud. Ctrl+C to exit."
+	@settings=$$(stty -g); \
+	cat "$(PORT)" & reader=$$!; \
+	trap 'kill $$reader 2>/dev/null; stty "$$settings"' EXIT; \
+	trap 'exit 0' INT TERM; \
+	stty -icanon -echo; \
+	cat > "$(PORT)"
 
 clean:
 	$(RM) -r build
