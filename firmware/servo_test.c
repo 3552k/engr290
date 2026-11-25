@@ -27,6 +27,7 @@
 
 /* Keep these the same as main.c */
 #define SERVO_CENTRE      90
+#define SERVO_TRIM        (-7)    /* fan points straight at servo 83: measured 2026-11-25 */
 #define SERVO_MIN_ANGLE   20
 #define SERVO_MAX_ANGLE   160
 
@@ -87,7 +88,7 @@ static void servo_write(int16_t angle)
     if (angle < SERVO_MIN_ANGLE) angle = SERVO_MIN_ANGLE;
     if (angle > SERVO_MAX_ANGLE) angle = SERVO_MAX_ANGLE;
     g_angle = (uint8_t)angle;
-    pulse_us = (uint16_t)(600 + (uint16_t)g_angle * 10);
+    pulse_us = (uint16_t)(600 + ((int16_t)g_angle + SERVO_TRIM) * 10);  /* trim so 90 = straight */
     OCR1A = (uint16_t)(pulse_us * 2);
 
     uart_text("servo ");

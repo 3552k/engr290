@@ -52,6 +52,7 @@
 #define NO_ECHO_CM        400     /* value used when nothing is in range      */
 
 #define SERVO_CENTRE      90
+#define SERVO_TRIM        (-7)    /* fan points straight at servo 83: measured 2026-11-25 */
 #define SERVO_MIN_ANGLE   20      /* mechanical limits of the mount           */
 #define SERVO_MAX_ANGLE   160
 
@@ -196,7 +197,7 @@ static void servo_write(uint8_t angle)
     if (angle > SERVO_MAX_ANGLE) angle = SERVO_MAX_ANGLE;
     g_servo_angle = angle;
     /* HS-311: about 10 us per degree, 1500 us = centre */
-    pulse_us = (uint16_t)(600 + (uint16_t)angle * 10);
+    pulse_us = (uint16_t)(600 + ((int16_t)angle + SERVO_TRIM) * 10);  /* trim so 90 = straight */
     OCR1A = (uint16_t)(pulse_us * 2);      /* timer counts in 0.5 us steps */
 }
 
